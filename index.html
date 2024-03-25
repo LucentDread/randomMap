@@ -1,0 +1,454 @@
+<html>
+	<head>
+		<style>
+			body {
+				margin: 0;
+				display: flex
+			}
+			canvas {
+				border: 1px solid;
+			}
+			pre {
+				display: inline;
+			}
+		</style>
+	</head>
+	<body>
+		
+		<canvas id="canvas"></canvas>
+		<div id="messages" style="font-size: 1.7rem;"></div>
+		<script>
+			class QCG {
+				constructor(seed) {
+					this.p = 1162261467
+					this.a = 14348907
+					this.b = this.a + 1%4
+					this.c = 65531
+					this.seed = seed
+				}
+
+				rand = () => {
+					this.seed =  (this.a*this.seed*this.seed + this.b*this.seed + this.c)%this.p
+					return this.seed
+				}
+				random(max) {
+					let result = this.seed % max
+					this.seed = (this.a * this.seed ** 2 + this.b * this.seed + this.c) % this.p
+					return result
+				}
+				randomElement(array) {
+					return array[this.random(array.length)]
+				}
+			}
+
+			let rand 
+			let canvas = document.getElementById("canvas")
+			let ctx = canvas.getContext("2d", {alpha: false})
+			let size
+
+			let initialDivisions = 4
+			let divisions = 4
+			let island
+			let noise = []
+
+			let interval
+			let busy = false
+			let stepDone = false
+			let stepsMessages = {
+				"fuzzyZoom": "Zooming (fuzzy)...\t\t",
+				"zoom": `Zooming...\t\t\t`,
+				"addIsland": `Adding more land...\t\t`,
+				"removeTooMuchWater": `Removing too much water...\t`,
+				"addTemp": `Adding temperatures...\t\t`,
+				"warmTemperate": `Cooling warm zones...\t\t`,
+				"freezingCold": `Warming freezing zones...\t`,
+				"addDeepWater": `Adding deep water...\t\t`,
+				"storeRiverMap": `Generating river map...\t`,
+				"shore": `Adding shores...\t\t`,
+				"smooth": `Smoothing terrain...\t\t`,
+				"river": `Generating rivers...\t\t`,
+			}
+
+			const log = (message, newLine=true) => {
+				document.getElementById("messages").innerHTML += "<pre>" + message + "</pre>" + (newLine ? "<br>" : "")
+			}
+
+			const fuzzyZoom = () => {
+				zoom(true)
+			}
+
+			const zoom = (fuzzy=false) => {
+				let prevDivisions = divisions
+				divisions *= 2
+
+				let newIsland = [...Array(divisions)].map(_=>Array(divisions).fill(0))  
+				for (let i = 0; i < island.length; i++) {
+					for (let j = 0; j < island.length; j++) {
+						let x = island[i][j]
+						newIsland[2*i][2*j] = x
+						let d2 = rand.random(2)
+						newIsland[2*i][2*j+1] = (j+1 >= prevDivisions-1 || d2 == 0) ? x : island[i][j+1]
+						d2 = rand.random(2)
+						newIsland[2*i+1][2*j] = (i+1 >= prevDivisions-1 || d2 == 0) ? x : island[i+1][j]
+						
+						let a = x
+						let b = (i+1 < prevDivisions) ? island[i+1][j] : x
+						let c = (j+1 < prevDivisions) ? island[i][j+1] : x
+						let d = (j+1 < prevDivisions && i+1 < prevDivisions) ? island[i+1][j+1] : x
+						let e = x
+						if(!fuzzy) {
+							if(b==c && c==d) e = b
+							else if(a==b && a==c) e=a
+							else if(a==b && a==d) e=a
+							else if(a==c && a==d) e=a
+							else if(a==b && c!=d) e=a
+							else if(a==c && b!=d) e=a
+							else if(a==d && b!=c) e=a
+							else if(b==c && a!=d) e=b
+							else if(b==d && a!=c) e=b
+							else if(c==d && a!=b) e=c
+							else {
+								let choices = [a,b,c,d]
+								e = choices[rand.random(4)]	
+							}
+						} else {
+							e = rand.randomElement([a, b, c, d])
+						}
+						newIsland[2*i+1][2*j+1] = e
+					}
+				}
+				island = newIsland
+			}
+
+			const addIsland = () => {
+				let newLayer = structuredClone(island)
+				for (let i = 0; i < island.length; i++) {
+					for (let j = 0; j < island.length; j++) {
+						let x = island[i][j]
+						let i1 = island[i - 1]?.[j]
+						let i2 = island[i + 1]?.[j]
+						let j1 = island[i]?.[j - 1]
+						let j2 = island[i]?.[j + 1]
+						let landNeighbour = i1 || 0
+						landNeighbour += i2 || 0
+						landNeighbour += j1 || 0
+						landNeighbour += j2 || 0
+						let newLandProba = 0.3-((8-landNeighbour)*0.0375)
+						let newWaterProba = 0.3 - newLandProba
+						let newNumber = island[i][j] > 0 ? newLandProba * 10000 : newWaterProba * 10000
+						for(let k = i-1; k<i+2; k++) {
+							if (island[k] == undefined) continue
+							// if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if ((k == i && l == j) || (k != i && l != j)) continue
+								let y = island[k][l]
+								if (isNaN(y)) continue
+								if ((x > 0 && y > 0) || ((x < 1 && y < 1))) continue
+								newLayer[k][l] = rand.random(10000) < newNumber ? x : y
+								// if(k == i && l == j) continue
+								// if(l < 0 || l > divisions-1) continue
+								// if(k != i && l != j) continue
+								// if(island[i][j] > 0 && island[j][k] > 0) continue
+								// if(island[i][j] < 1 && island[j][k] < 1) continue
+								// let rnd = rand.rand()
+								// if((rnd - Math.trunc(rnd/10000)*10000) - 2 < newNumber) island[k][l] = x
+							}
+						}
+					}
+				}
+				island = newLayer
+			}
+
+			const removeTooMuchWater = () => {
+				let newIsland = island
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] > 0) continue
+						let sumWater = 0
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(island[k][l] <= 0) sumWater += 1
+							}
+						}
+						if(sumWater < 4	) continue
+						let rnd = rand.rand()
+						if((rnd - Math.trunc(rnd/10)*10) < 5) newIsland[i][j] = 1
+					}
+				}
+				island = newIsland
+			}
+					
+			const addDeepWater = () => {
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] > 0) continue
+						let sumWater = 0
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(k != i && l != j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(island[k][l] <= 0) sumWater += 1
+							}
+						}
+						if(sumWater < 4	) continue
+						island[i][j] = -1
+					}
+				}
+			}
+
+			const addTemp = () => {
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] < 1) continue
+						let rnd = rand.rand()
+						let number = rnd - Math.trunc(rnd/10000)*10000
+						if(number < 6664) island[i][j] = 2
+						if(number >= 6664 && number < 8330) island[i][j] = 3
+						if(number >= 8330) island[i][j] = 4
+					}
+				}
+			}
+
+			const warmTemperate = () => {
+				let warmTemp = island
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] != 2) continue
+						let hasCold = false
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(k != i && l != j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(island[k][l] > 2) hasCold = true
+							}
+						}
+						if(hasCold) warmTemp[i][j] = 1
+					}
+				}
+				island = warmTemp
+			}
+
+			const freezingCold = () => {
+				let freezCold = island
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] != 4) continue
+						let hasTemp = false
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(k != i && l != j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(island[k][l] < 3 && island[k][l] > 0) hasTemp = true
+							}
+						}
+						if(hasTemp) freezCold[i][j] = 3
+					}
+				}
+				island = freezCold
+			}
+
+			const shore = () => {
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] < 1) continue
+						if(island[i][j] == 2 || island[i][j] == 4) continue
+						let hasWater = false
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(k != i && l != j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(island[k][l] == 0) hasWater = true
+							}
+						}
+						if(hasWater) island[i][j] = 5
+					}
+				}
+			}
+
+			const storeRiverMap = () => {
+				noise = island
+			}
+
+			const river = () => {
+				let is = island
+				let tempDivisions = divisions
+				divisions = initialDivisions*4*4
+				island = noise
+				zoom()
+				zoom()
+				zoom()
+				zoom()
+				zoom()
+				zoom()
+				let riverMask = [...Array(divisions)].map(_=>Array(divisions).fill(0))  
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(x < 0) continue
+						let neighbours = 0
+						for(let k = i-1; k<i+2; k++) {
+							if(k<0 || k > divisions-1) continue
+							for(let l = j-1; l<j+2; l++) {
+								if(k == i & l == j) continue
+								if(l < 0 || l > divisions-1) continue
+								if(k != i && l != j) continue
+								if(island[k][l] == x || island[k][l] == 5) neighbours += 1
+							}
+						}
+						if(neighbours != 4) riverMask[i][j] = 2
+					}
+				}
+				island = riverMask
+				smooth()
+				riverMask = island
+				island = is
+				divisions = tempDivisions
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(island[i][j] < 1) continue
+						
+						if(riverMask[i][j] == 2) island[i][j] = 0
+					}
+				}
+			}
+
+			const smooth = () => {
+				let newIsland = island
+				for(let [i,row] of island.entries()) {
+					if(i==0 || i == divisions-1) continue
+					for(let [j, x] of row.entries()) {
+						if(j==0 || j == divisions-1) continue
+						if(island[i-1][j] == island[i+1][j] && island[i][j-1] == island[i][j+1]) {
+							let rnd = rand.rand()
+							rnd -= Math.trunc(rnd/100)*100
+							newIsland[i][j] = rnd < 50 ? island[i-1][j] : island[i][j-1]
+						} else {
+							if(island[i-1][j] == island[i+1][j]) newIsland[i][j] = island[i-1][j]
+							if(island[i][j-1] == island[i][j+1]) newIsland[i][j] = island[i][j-1]
+						}
+						
+					}
+				}
+				island = newIsland
+				
+			}
+
+			let steps = [fuzzyZoom, addIsland, zoom, addIsland, addIsland, addIsland, 
+			removeTooMuchWater, addTemp, warmTemperate, freezingCold, addIsland, zoom, 
+			zoom, addIsland, addDeepWater, storeRiverMap, zoom, zoom, zoom, addIsland, 
+			zoom, shore, zoom, zoom, smooth, river, zoom]
+			let totalSteps = steps.length+1
+			document.addEventListener("DOMContentLoaded", () => {
+				const searchParams = new URLSearchParams(window.location.search);
+				size = 4096
+				let seed
+				if(searchParams.has("size")) {
+					initialDivisions = parseInt(searchParams.get('size'))
+					divisions = parseInt(searchParams.get("size"))
+				}
+
+				if(searchParams.has("seed")) {
+					seed = parseInt(searchParams.get("seed"))
+				} else {
+					seed = Math.floor(Math.random()*1e10)
+				}
+				rand = new QCG(seed)
+				dimension = document.documentElement.clientHeight
+
+				canvas.width = 4096
+				canvas.height = 4096
+		
+				ctx.imageSmoothingEnabled = true;
+				log(`(1 / ${totalSteps}) Generating initial map...\t`, false)
+				island = [...Array(divisions)].map(_=>Array(divisions).fill(0))  
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						let rnd = rand.rand()
+						let number = rnd - Math.trunc(rnd/10)*10
+						if(number == 0) island[i][j] = 1
+					}
+				}
+				clearCanvas()
+				drawIsland()
+				log(`Done`)
+				next()
+			})
+
+			const next = () => {
+				if(!busy) {
+					if(stepDone) log(`Done`)
+					busy = true
+					log(`(${totalSteps - steps.length + 1} / ${totalSteps}) ` + stepsMessages[steps[0].name], false)
+					stepDone = false
+					setTimeout(() => {
+						(steps.shift())()
+						stepDone = true
+						clearCanvas()
+						drawIsland()
+						busy = false
+					}, 200)
+				}
+				if(steps.length > 0) {
+					(window.requestAnimationFrame)(next)
+					return
+				}
+			}
+
+			const tileSize = (divisons) => {
+				return size/divisons
+			}
+
+			const clearCanvas = () => {
+				ctx.clearRect(0,0,size,size)
+			}
+
+			const drawGrid = () => {
+				for(let i = 1 ; i <= size-1; i++) {
+					ctx.beginPath();
+					ctx.moveTo(i*size/divisions, 0);
+					ctx.lineTo(i*size/divisions, size);
+					ctx.stroke();
+				}
+				for(let i = 1; i <= size-1; i++) {
+					ctx.beginPath();
+					ctx.moveTo(0, i*size/divisions);
+					ctx.lineTo(size, i*size/divisions);
+					ctx.stroke();
+				}
+			}
+		
+			const drawIsland = () => {
+				for(let [i,row] of island.entries()) {
+					for(let [j, x] of row.entries()) {
+						if(x == 1) {
+							ctx.fillStyle = "green";	
+						} else if(x == 2) {
+							ctx.fillStyle = "orange";
+						} else if(x == 3) {
+							ctx.fillStyle = "darkgreen";
+						} else if(x == 4) {
+							ctx.fillStyle = "white";
+						} else if(x == 5) {
+							ctx.fillStyle = "yellow";
+						} else if(x == 0) {
+							ctx.fillStyle = "blue";
+						} else {
+							ctx.fillStyle = "darkblue";
+						}
+						ctx.fillRect((i*tileSize(divisions)), (j*tileSize(divisions)), (tileSize(divisions)), (tileSize(divisions)));
+					}			
+				}
+			}
+		</script>
+	</body>
+</html>

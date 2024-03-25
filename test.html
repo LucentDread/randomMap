@@ -1,0 +1,29 @@
+<html>
+	<head>
+		<style>
+			body {
+				margin: 0;
+				display: flex
+			}
+			canvas {
+				border: 1px solid;
+			}
+			pre {
+				display: inline;
+			}
+		</style>
+		<script src="layer.js"></script>
+	</head>
+	<body>
+		<canvas id="canvas"></canvas>
+		<div id="messages" style="font-size: 1.7rem;"></div>
+	</body>
+	<script>
+		let canvas = document.getElementById("canvas")
+		let ctx = canvas.getContext("2d", {alpha: false})
+		canvas.width = document.documentElement.clientHeight
+		canvas.height = document.documentElement.clientHeight
+		let layer = new Layer(Math.floor(Math.random()*1e10), 4, ctx, document.documentElement.clientHeight)
+		layer.generate()
+	</script>
+</html>
