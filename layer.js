@@ -1,80 +1,70 @@
 class Layer {
 	constructor(seed, size = 0, ctx = null, ctxSize = 0) {
-		Layer.p = 1162261467
-		Layer.a = 14348907
-		Layer.b = this.a + 1 % 4
-		Layer.c = 65531
-		Layer.seed = (Layer.a * seed ** 2 + Layer.b * seed + Layer.c) % Layer.p
-		Layer.size = size
-		Layer.ctxSize = ctxSize
-		Layer.ctx = ctx
+		this.p = 1162261467
+		this.a = 14348907
+		this.b = this.a + 1 % 4
+		this.c = 65531
+		this.seed = (this.a * seed ** 2 + this.b * seed + this.c) % this.p
+		this.size = size
+		this.ctxSize = ctxSize
+		this.ctx = ctx
 	}
 
-	static currentStep = 0
-	static previousLayer = null
-
 	generate() {
-		Layer.steps = [
-			new LayerIsland(Layer.seed, Layer.size),
-			new LayerZoom(Layer.seed, Layer.previousLayer, true),
-			new LayerAddIsland(Layer.seed, Layer.previousLayer),
-			new LayerZoom(Layer.seed, Layer.previousLayer),
-			new LayerAddIsland(Layer.seed, Layer.previousLayer),
-			new LayerAddIsland(Layer.seed, Layer.previousLayer),
-			new LayerAddIsland(Layer.seed, Layer.previousLayer),
-			new LayerRemoveTooMuchWater(Layer.seed, Layer.previousLayer),
-			new LayerAddTemperature(Layer.seed, Layer.previousLayer)
-		]
+		this.layer = (new LayerIsland(this.seed, this.size)).generate()
+		this.draw()
+		this.layer = (new LayerZoom(this.seed, this.layer, true)).generate()
+		this.draw()
+		this.layer = (new LayerAddIsland(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerZoom(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerAddIsland(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerAddIsland(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerAddIsland(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerRemoveTooMuchWater(this.seed, this.layer)).generate()
+		this.draw()
+		this.layer = (new LayerAddTemperature(this.seed, this.layer)).generate()
 		this.draw()
 	}
 
-	syncWait(ms) {
-		const end = Date.now() + ms
-		while (Date.now() < end) continue
-	}
-
 	draw() {
-		console.log(Layer.previousLayer)
-		Layer.previousLayer = (Layer.steps[Layer.currentStep]).generate()
-
-		Layer.currentStep += 1
-		setTimeout(() => {
-
-			Layer.ctx.clearRect(0, 0, Layer.ctxSize, Layer.ctxSize)
-			let tileSize = Layer.ctxSize / Layer.previousLayer.length
-			for (let i = 0; i < Layer.previousLayer.length; i++) {
-				for (let j = 0; j < Layer.previousLayer.length; j++) {
-					let x = Layer.previousLayer.layer[i][j]
-					if (x == 1) {
-						Layer.ctx.fillStyle = "green";
-					} else if (x == 2) {
-						Layer.ctx.fillStyle = "orange";
-					} else if (x == 3) {
-						Layer.ctx.fillStyle = "darkgreen";
-					} else if (x == 4) {
-						Layer.ctx.fillStyle = "white";
-					} else if (x == 5) {
-						Layer.ctx.fillStyle = "yellow";
-					} else if (x == 0) {
-						Layer.ctx.fillStyle = "blue";
-					} else {
-						Layer.ctx.fillStyle = "darkblue";
-					}
-					Layer.ctx.fillRect(Math.ceil(i * tileSize), Math.ceil(j * tileSize), Math.ceil(tileSize), Math.ceil(tileSize));
+		this.ctx.clearRect(0, 0, this.ctxSize, this.ctxSize)
+		let tileSize = this.ctxSize / this.layer.length
+		for (let i = 0; i < this.layer.length; i++) {
+			for (let j = 0; j < this.layer.length; j++) {
+				let x = this.layer[i][j]
+				if (x == 1) {
+					ctx.fillStyle = "green";
+				} else if (x == 2) {
+					ctx.fillStyle = "orange";
+				} else if (x == 3) {
+					ctx.fillStyle = "darkgreen";
+				} else if (x == 4) {
+					ctx.fillStyle = "white";
+				} else if (x == 5) {
+					ctx.fillStyle = "yellow";
+				} else if (x == 0) {
+					ctx.fillStyle = "blue";
+				} else {
+					ctx.fillStyle = "darkblue";
 				}
+				ctx.fillRect(Math.ceil(i * tileSize), Math.ceil(j * tileSize), Math.ceil(tileSize), Math.ceil(tileSize));
 			}
-		}, 300)
-		if (Layer.currentStep < Layer.steps.length) window.requestAnimationFrame(this.draw)
+		}
 	}
 
-	static random(max) {
-		let result = Layer.seed % max
-		Layer.seed = (Layer.a * Layer.seed ** 2 + Layer.b * Layer.seed + Layer.c) % Layer.p
+	random(max) {
+		let result = this.seed % max
+		this.seed = (this.a * this.seed ** 2 + this.b * this.seed + this.c) % this.p
 		return result
 	}
 
-	static randomElement(array) {
-		return array[Layer.random(array.length)]
+	randomElement(array) {
+		return array[this.random(array.length)]
 	}
 
 }
@@ -88,7 +78,7 @@ class LayerIsland extends Layer {
 	generate() {
 		for (let i = 0; i < this.layer.length; i++) {
 			for (let j = 0; j < this.layer.length; j++) {
-				if (Layer.random(10) == 0) this.layer[i][j] = 1
+				if (this.random(10) == 0) this.layer[i][j] = 1
 			}
 		}
 		return this.layer
@@ -110,15 +100,15 @@ class LayerZoom extends Layer {
 				let x = this.layer[i][j]
 
 				zoomedLayer[2 * i][2 * j] = x
-				let d2 = Layer.random(2)
-				zoomedLayer[2 * i][2 * j + 1] = (j + 1 >= this.layer.length - 1 || d2 == 0) ? x : this.layer[i][j + 1]
-				d2 = Layer.random(2)
-				zoomedLayer[2 * i + 1][2 * j] = (i + 1 >= this.layer.length - 1 || d2 == 0) ? x : this.layer[i + 1][j]
+				let d2 = this.random(2)
+				zoomedLayer[2 * i][2 * j + 1] = (j + 1 >= newSize - 1 || d2 == 0) ? x : this.layer[i][j + 1]
+				d2 = this.random(2)
+				zoomedLayer[2 * i + 1][2 * j] = (i + 1 >= newSize - 1 || d2 == 0) ? x : this.layer[i + 1][j]
 
 				let a = x
-				let b = (i + 1 < this.layer.length) ? this.layer[i + 1][j] : x
-				let c = (j + 1 < this.layer.length) ? this.layer[i][j + 1] : x
-				let d = (j + 1 < this.layer.length && i + 1 < this.layer.length) ? this.layer[i + 1][j + 1] : x
+				let b = (i + 1 < newSize) ? this.layer[i + 1][j] : x
+				let c = (j + 1 < newSize) ? this.layer[i][j + 1] : x
+				let d = (j + 1 < newSize && i + 1 < newSize) ? this.layer[i + 1][j + 1] : x
 				let e = x
 				if (!this.fuzzy) {
 					if (b == c && c == d) e = b
@@ -133,10 +123,10 @@ class LayerZoom extends Layer {
 					else if (c == d && a != b) e = c
 					else {
 						let choices = [a, b, c, d]
-						e = choices[Layer.random(4)]
+						e = choices[this.random(4)]
 					}
 				} else {
-					e = Layer.randomElement([a, b, c, d])
+					e = this.randomElement([a, b, c, d])
 				}
 				zoomedLayer[2 * i + 1][2 * j + 1] = e
 			}
@@ -175,7 +165,7 @@ class LayerAddIsland extends Layer {
 						let y = this.layer[k][l]
 						if (isNaN(y)) continue
 						if ((x > 0 && y > 0) || ((x < 1 && y < 1))) continue
-						addLayer[k][l] = Layer.random(1000) < newNumber ? x : y
+						addLayer[k][l] = this.random(1000) < newNumber ? x : y
 					}
 				}
 			}
@@ -205,7 +195,7 @@ class LayerRemoveTooMuchWater extends Layer {
 				landNeighbour += j1 || 0
 				landNeighbour += j2 || 0
 				if (landNeighbour == 0) {
-					addLayer[i][j] = Layer.random(2) == 0 ? 1 : x
+					addLayer[i][j] = this.random(2) == 0 ? 1 : x
 				}
 			}
 		}
@@ -226,7 +216,7 @@ class LayerAddTemperature extends Layer {
 			for (let j = 0; j < this.layer.length; j++) {
 				let x = this.layer[i][j]
 				if (x != 1) continue
-				let d6 = Layer.random(6)
+				let d6 = this.random(6)
 				let temp = x
 				switch (d6) {
 					case 0:
